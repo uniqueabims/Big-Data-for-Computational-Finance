@@ -1,0 +1,407 @@
+
+# <center>Classifying Credit Rating and Predicting Investment Grade Status<center>
+
+#Import necessary libraries
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
+import random
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+# Read the CSV file into DataFrame
+data = pd.read_csv("MLF_GP1_CreditScore.csv")
+
+# Display the first 5 rows of the DataFrame
+data.head(5)
+
+
+data.keys
+
+data.info()
+
+data.shape
+
+data.describe()
+
+#checking for missing values
+data.isnull().sum()
+
+#Checking for duplicates
+duplicates = data[data.duplicated()]
+
+if duplicates.empty:
+    print("No duplicates found")
+else:
+    print("Duplicates found")
+    print(duplicates)
+
+# Get all the unique values in the "InvGrd" column
+unique_ratings = data["InvGrd"].unique()
+
+# Print the unique values
+print(unique_ratings)
+
+# Get all the unique values in the "Rating" column
+unique_ratings = data["Rating"].unique()
+
+# Print the unique values
+print(unique_ratings)
+
+## Exploratory Data Analysis (EDA)
+
+# Distribution of the target variables
+plt.figure(figsize=(10, 5))
+sns.countplot(x='Rating', data=data, order=data['Rating'].value_counts().index)
+plt.title('Distribution of Credit Rating Categories')
+plt.show()
+
+# Distribution of the features
+data.iloc[:, :-2].hist(figsize=(15, 15), bins=20)
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(6, 7))
+ax = sns.countplot(x='InvGrd', data=data)
+plt.title('Distribution of Investment Grade')
+
+# Print the count value on each bar
+for p in ax.patches:
+    ax.annotate(format(p.get_height(), '.0f'), 
+                (p.get_x() + p.get_width() / 2., p.get_height()), 
+                ha = 'center', va = 'center', 
+                xytext = (0, 10), 
+                textcoords = 'offset points')
+
+plt.show()
+
+
+# Correlation analysis
+corr_matrix = data.iloc[:, :-2].corr()
+plt.figure(figsize=(12, 10))
+sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('Feature Correlation Matrix')
+plt.show()
+
+## Preparing the Dataset
+
+# Set the seed for reproducibility
+seed_value = 42
+np.random.seed(seed_value)
+tf.random.set_seed(seed_value)
+random.seed(seed_value)
+
+# Split the dataset into training set and test set
+train_data, test_data = train_test_split(data, test_size=0.2, random_state=42)
+
+# Extract the features and the target variable for the training set
+X_train = train_data.iloc[:, :-2].values
+y_train_rating = train_data.iloc[:, -2].values
+y_train_investment_grade = train_data['InvGrd'].values
+
+# Extract the features and the target variable for the test set
+X_test = test_data.iloc[:, :-2].values
+y_test_rating = test_data.iloc[:, -2].values
+y_test_investment_grade = test_data['InvGrd'].values
+
+# Scale the features using StandardScaler
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# Encode the rating labels
+label_encoder_rating = LabelEncoder()
+y_train_rating = label_encoder_rating.fit_transform(y_train_rating)
+y_test_rating = label_encoder_rating.transform(y_test_rating)
+
+### 1) Linear Regression with Ridge and Lasso Regularisation for Investment Grade Prediction
+
+# Implement linear regression with Ridge (L2) regularisation
+#Create a pipeline for the Ridge model
+ridge_pipeline = Pipeline([
+    ("ridge", Ridge(alpha=1.0))
+])
+
+# Implement linear regression with Lasso (L1) regularisation
+# Create a pipeline for the Lasso model
+lasso_pipeline = Pipeline([
+    ("lasso", Lasso(alpha=1.0))
+])
+
+# Perform cross-validation for the Ridge model
+ridge_cv_scores = cross_val_score(ridge_pipeline, X_train, y_train, cv=5)
+print("Ridge Model Cross-validation Scores: ", ridge_cv_scores)
+
+# Perform cross-validation for the Lasso model
+lasso_cv_scores = cross_val_score(lasso_pipeline, X_train, y_train, cv=5)
+print("Lasso Model Cross-validation Scores: ", lasso_cv_scores)
+
+
+# Create a DataFrame with cross-validation scores
+cv_scores_df = pd.DataFrame({'Ridge Model': ridge_cv_scores, 'Lasso Model': lasso_cv_scores})
+
+# Display cross-validation scores in tabular form
+print(cv_scores_df)
+
+# Train the Ridge model using the pipeline
+ridge_pipeline.fit(X_train, y_train)
+
+# Train the Lasso model using the pipeline
+lasso_pipeline.fit(X_train, y_train)
+
+# Predict whether firms are investment grade or not using the Ridge model
+y_pred_ridge = ridge_pipeline.predict(X_test)
+y_pred_ridge = (y_pred_ridge > 0.5).astype(int)
+
+# Predict whether firms are investment grade or not using the Lasso model
+y_pred_lasso = lasso_pipeline.predict(X_test)
+y_pred_lasso = (y_pred_lasso > 0.5).astype(int)
+
+# Compute the accuracy and F1 score of the Ridge model
+acc_ridge = accuracy_score(y_test, y_pred_ridge)
+f1_ridge = f1_score(y_test, y_pred_ridge)
+confusion_matrix_ridge = confusion_matrix(y_test, y_pred_ridge)
+
+print("Ridge Model Accuracy: {:.2f}".format(acc_ridge))
+print("Ridge Model F1 Score: {:.2f}".format(f1_ridge))
+print("Ridge Model Confusion Matrix:\n", confusion_matrix_ridge)
+
+# Compute the accuracy and F1 score of the Lasso model
+acc_lasso = accuracy_score(y_test, y_pred_lasso)
+f1_lasso = f1_score(y_test, y_pred_lasso)
+confusion_matrix_lasso = confusion_matrix(y_test, y_pred_lasso)
+
+print("Lasso Model Accuracy: {:.2f}".format(acc_lasso))
+print("Lasso Model F1 Score: {:.2f}".format(f1_lasso))
+print("Lasso Model Confusion Matrix:\n", confusion_matrix_lasso)
+
+import seaborn as sns
+
+# Plot confusion matrix for Ridge model
+plt.figure(figsize=(6, 6))
+sns.heatmap(confusion_matrix_ridge, annot=True, fmt='d', cmap='Blues', cbar=False, square=True)
+plt.title("Ridge Model Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+# Plot confusion matrix for Lasso model
+plt.figure(figsize=(6, 6))
+sns.heatmap(confusion_matrix_lasso, annot=True, fmt='d', cmap='Blues', cbar=False, square=True)
+plt.title("Lasso Model Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+
+### 2) Logistic Regression with Ridge and Lasso Regularisation for Investment Grade Prediction
+
+# Create Ridge logistic regression pipeline
+ridge_pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('ridge', LogisticRegression(penalty='l2', max_iter=1000, random_state=42))
+])
+
+# Hyperparameter tuning for Ridge model
+ridge_params = {'ridge__C': np.logspace(-4, 4, 20)}
+ridge_grid = GridSearchCV(ridge_pipeline, ridge_params, cv=5)
+ridge_grid.fit(X_train, y_train)
+
+# Evaluate the performance of the Ridge logistic regression model on the test set
+y_pred = ridge_grid.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+confusion = confusion_matrix(y_test, y_pred)
+
+print("Ridge Logistic Regression:")
+print("Accuracy: {:.4f}".format(accuracy))
+print("Precision: {:.4f}".format(precision))
+print("Recall: {:.4f}".format(recall))
+print("F1 Score: {:.4f}".format(f1))
+print("Confusion Matrix:\n", confusion)
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+confusion = confusion_matrix(y_test, y_pred)
+
+# Visualize the confusion matrix using matplotlib and seaborn
+plt.figure(figsize=(8, 6))
+sns.heatmap(confusion, annot=True, fmt='d', cmap='coolwarm', cbar=False)
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.title('Confusion Matrix for Ridge Logistic Regression')
+plt.show()
+
+
+# Create Lasso logistic regression pipeline
+lasso_pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    
+    # Implement logistic regression with Lasso (L1) regularisation
+    ('lasso', LogisticRegression(penalty='l1', solver='liblinear', random_state=42))
+])
+
+# Hyperparameter tuning for Lasso model
+lasso_params = {'lasso__C': np.logspace(-4, 4, 20)}
+
+# 5-fold cross-validation is used
+lasso_grid = GridSearchCV(lasso_pipeline, lasso_params, cv=5)
+
+# Perform the hyperparameter tuning with cross-validation
+lasso_grid.fit(X_train, y_train)
+
+# Evaluate the performance of the Lasso logistic regression model on the test set
+y_pred = lasso_grid.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+confusion = confusion_matrix(y_test, y_pred)
+print("Lasso Logistic Regression:")
+print("Accuracy: {:.4f}".format(accuracy))
+print("Precision: {:.4f}".format(precision))
+print("Recall: {:.4f}".format(recall))
+print("F1 Score: {:.4f}".format(f1))
+print("Confusion Matrix:\n", confusion)
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+confusion = confusion_matrix(y_test, y_pred)
+
+# Visualize the confusion matrix using matplotlib and seaborn
+plt.figure(figsize=(8, 6))
+sns.heatmap(confusion, annot=True, fmt='d', cmap='coolwarm', cbar=False)
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.title('Confusion Matrix for Lasso Logistic Regression')
+plt.show()
+
+
+### 3) Neural Network Classification of Corporate Credit Ratings: Predicting Investment Grade Status
+
+# Define a function to build the neural network model
+def build_model(num_classes):
+    model = Sequential()
+    model.add(Dense(128, activation='relu', input_shape=(X_train.shape[1],)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(Dense(64, activation='relu'))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(Dense(num_classes, activation='softmax'))
+
+    model.compile(optimizer=Adam(learning_rate=0.001),
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+    return model
+
+# Build model for rating classification
+rating_model = build_model(len(np.unique(y_train_rating)))
+
+# Build model for investment grade classification
+investment_grade_model = build_model(2)
+
+# Train the rating model
+rating_history = rating_model.fit(X_train, y_train_rating, epochs=100, batch_size=32,
+                                  validation_split=0.2, callbacks=[EarlyStopping(patience=10, restore_best_weights=True)])
+
+# Train the investment grade model
+investment_grade_history = investment_grade_model.fit(X_train, y_train_investment_grade, epochs=100, batch_size=32,
+                                                      validation_split=0.2, callbacks=[EarlyStopping(patience=10, restore_best_weights=True)])
+
+# Evaluate the rating model
+rating_loss, rating_accuracy = rating_model.evaluate(X_test, y_test_rating)
+print(f"Rating model accuracy: {rating_accuracy}")
+
+# Evaluate the investment grade model
+investment_grade_loss, investment_grade_accuracy = investment_grade_model.evaluate(X_test, y_test_investment_grade)
+print(f"Investment grade model accuracy: {investment_grade_accuracy}")
+
+# Define a function to plot training history
+def plot_training_history(history, title):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+    ax1.plot(history.history['accuracy'], label='Train')
+    ax1.plot(history.history['val_accuracy'], label='Validation')
+    ax1.set_title(f"{title} Model Accuracy")
+    ax1.set_xlabel('Epochs')
+    ax1.set_ylabel('Accuracy')
+    ax1.legend()
+
+    ax2.plot(history.history['loss'], label='Train')
+    ax2.plot(history.history['val_loss'], label='Validation')
+    ax2.set_title(f"{title} Model Loss")
+    ax2.set_xlabel('Epochs')
+    ax2.set_ylabel('Loss')
+    ax2.legend()
+
+    plt.show()
+
+# Plot the training history for both models
+plot_training_history(rating_history, "Rating")
+plot_training_history(investment_grade_history, "Investment Grade")
+
+# Define a function to plot confusion matrix
+def plot_confusion_matrix(y_true, y_pred, labels, title):
+    cm = confusion_matrix(y_true, y_pred)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, xticklabels=labels, yticklabels=labels)
+    ax.set_title(f"{title} Confusion Matrix")
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('True')
+    plt.show()
+
+# Get predictions for both models
+y_pred_rating = rating_model.predict(X_test).argmax(axis=1)
+y_pred_investment_grade = investment_grade_model.predict(X_test).argmax(axis=1)
+
+# Plot the confusion matrices for both models
+rating_labels = label_encoder_rating.inverse_transform(np.unique(y_train_rating))
+plot_confusion_matrix(y_test_rating, y_pred_rating, rating_labels, "Rating")
+plot_confusion_matrix(y_test_investment_grade, y_pred_investment_grade, ['Non-Investment Grade', 'Investment Grade'], "Investment Grade")
+
+
+### Model Accuracy Comparison
+
+# Accuracy for each model
+ridge_linear_accuracy = 0.77
+lasso_linear_accuracy = 0.75
+ridge_logistic_accuracy = 0.7618
+lasso_logistic_accuracy = 0.7676
+neural_network_accuracy = 0.81
+
+# Model names
+models = ['Ridge Lin', 'Lasso Lin', 'Ridge Log', 'Lasso Log', 'Neural Net']
+
+# Accuracy scores
+accuracy_scores = [ridge_linear_accuracy, lasso_linear_accuracy, ridge_logistic_accuracy, lasso_logistic_accuracy, neural_network_accuracy]
+
+# Colors for the bars
+colors = ['Pink', 'Pink', 'Red', 'Red', 'Green']
+
+# Create bar plot
+fig, ax = plt.subplots()
+bar_positions = range(len(models))
+ax.bar(bar_positions, accuracy_scores, align='center', alpha=1, color=colors)
+ax.set_xticks(bar_positions)
+ax.set_xticklabels(models)
+ax.set_xlabel('Models')
+ax.set_ylabel('Accuracy')
+ax.set_title('Model Accuracy Comparison')
+
+plt.show()
+
+
